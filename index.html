@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PZ Build 42 - コレクション管理</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+  padding: 12px;
+  padding-bottom: 80px;
+  min-height: 100vh;
+}
+h1 { text-align: center; font-size: 1.1rem; margin-bottom: 8px; color: #e94560; }
+.tabs {
+  display: flex; gap: 0; margin-bottom: 12px; border-radius: 10px; overflow: hidden;
+}
+.tab {
+  flex: 1; padding: 10px 0; text-align: center; font-size: 14px; font-weight: bold;
+  background: #16213e; color: #888; cursor: pointer; border: none;
+  -webkit-tap-highlight-color: transparent; transition: all 0.2s;
+}
+.tab.active { background: #e94560; color: #fff; }
+.controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.controls input, .controls select {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid #333;
+  background: #16213e; color: #eee; font-size: 14px;
+}
+.controls input { flex: 1; min-width: 120px; }
+.progress-wrap {
+  background: #16213e; border-radius: 8px; height: 26px;
+  margin-bottom: 12px; overflow: hidden; position: relative;
+}
+.progress-fill { background: linear-gradient(90deg,#e94560,#0f3460); height: 100%; transition: width 0.3s; }
+.progress-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 11px; font-weight: bold;
+}
+</style>
+</head>
+<body>
+<h1>📚 PZ B42 コレクション管理</h1>
+<div class="tabs">
+  <button class="tab active" data-tab="books">📖 スキルブック</button>
+  <button class="tab" data-tab="vhs">📼 スキルVHS</button>
+</div>
+<div class="controls">
+  <input type="text" id="search" placeholder="🔍 検索...">
+  <select id="filter">
+    <option value="all">すべて</option>
+    <option value="incomplete">未コンプ</option>
+    <option value="complete">コンプ済</option>
+  </select>
+</div>
+<div class="progress-wrap">
+  <div class="progress-fill" id="progress-fill"></div>
+  <span class="progress-text" id="progress-text"></span>
+</div>
+<div id="app"></div>
+<button id="reset-btn" style="display:block;margin:20px auto;padding:10px 20px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">🗑️ データをリセット</button>
+<style>
+.skill-group { margin-bottom: 14px; }
+.skill-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: #16213e; border-radius: 10px;
+  cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.skill-header .name { font-weight: bold; font-size: 14px; }
+.skill-header .badge {
+  background: #e94560; color: #fff; border-radius: 12px;
+  padding: 2px 8px; font-size: 11px; white-space: nowrap;
+}
+.skill-header .badge.done { background: #2ecc71; }
+.skill-books { display: none; padding: 6px 0 0 0; }
+.skill-books.open { display: block; }
+.book-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; margin: 4px 0; background: #0f3460;
+  border-radius: 8px; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.book-item.got { background: #1a4a1a; }
+.book-info { flex: 1; min-width: 0; }
+.book-title { font-size: 13px; font-weight: bold; }
+.book-meta { font-size: 11px; color: #999; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.count-controls {
+  display: flex; align-items: center; gap: 0; flex-shrink: 0;
+}
+.count-btn {
+  width: 32px; height: 32px; border: none; border-radius: 6px;
+  font-size: 18px; font-weight: bold; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent; transition: background 0.1s;
+}
+.count-btn.minus { background: #c0392b; color: #fff; }
+.count-btn.plus { background: #27ae60; color: #fff; }
+.count-btn:active { opacity: 0.6; }
+.count-val {
+  width: 28px; text-align: center; font-size: 15px; font-weight: bold;
+}
+</style>
+<script>
+// === DATA ===
+const BOOKS = [
+  { skill: "Agriculture", ja: "農業", volumes: [
+    { vol: "I", title: "Better Gardening", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Growing Food at Home", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Liam Keating's Subsistence Farming", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "The Science of Crop Genetics and Yields", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "USDA Guide to Agricultural Output Maximization", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Aiming", ja: "照準", volumes: [
+    { vol: "I", title: "Better Aiming", levels: "1-2", mult: "×1.5" },
+    { vol: "II", title: "Drawing and Shooting", levels: "3-4", mult: "×2.5" },
+    { vol: "III", title: "Leading Moving Targets", levels: "5-6", mult: "×4" },
+    { vol: "IV", title: "Long Range Sniping Tactics", levels: "7-8", mult: "×6" },
+    { vol: "V", title: "Secrets From the World's Best Snipers", levels: "9-10", mult: "×8" }
+  ]},
+  { skill: "Animal Care", ja: "畜産", volumes: [
+    { vol: "I", title: "A Tale of St. Francis", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Animal Welfare Basics", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "How Animals Think: A Helpful Guide", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "The Wants and Needs of Diverse Fauna", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Wilds Tamed: An In-Depth Comparative", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Blacksmithing", ja: "鍛冶", volumes: [
+    { vol: "I", title: "Elementary Forge Practice", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "General Purpose Blacksmithing", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Old West Smiths and Their Secrets", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Really Hard Steel Co. Workers Handbook", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "The Complete Encyclopedia of Metallurgy", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Butchering", ja: "解体", volumes: [
+    { vol: "I", title: "Butchering Basics", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "From Chuck to Shank", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Hunter's Guide to Butchering", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Master Butcher's Complete Guide", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "The Ergonomics of Tools in Meat Cutting Operations", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Carpentry", ja: "大工", volumes: [
+    { vol: "I", title: "A Guide to Nailing", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Carpentry, Woodcraft Style", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Hand Crafted Shelving and Storage", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Making Your Own Cabin From Scratch", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Site Joinery and Architectural Carpentry", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Carving", ja: "彫刻", volumes: [
+    { vol: "I", title: "Beginners Carving", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Cool Woodshaping Projects!", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Grinling Gibbons: His Life and Works", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Medieval Wood and Bone Carving Techniques", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "The Art and Process of Natural Material Carving", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Cooking", ja: "料理", volumes: [
+    { vol: "I", title: "Better Burger Flipping", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Essential Home Cooking Guide", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Flavorful Cuisine - 1993 Edition", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Professional Tips from a Master Chef", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Ruban Vert Gourmet - Complete Cooking Techniques", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Electrical", ja: "電気", volumes: [
+    { vol: "I", title: "Basic Electronics", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Kentucky AV Guide '93", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Practical Wiring Guide", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Telecommunications in the 20th Century", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Understanding Integrated Controls for Electronic Systems", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "First Aid", ja: "応急手当", volumes: [
+    { vol: "I", title: "A Scouts Injury Guide", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Bandaging and Suturing", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Emergency Paramedics Manual", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Gray's Anatomy of the Human Body", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Surgical Techniques of the Operating Room", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Fishing", ja: "釣り", volumes: [
+    { vol: "I", title: "Dean's Good Fishing Guide", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Fly Fishing, with JR Hartley", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Fresh and Saltwater Fishing", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Latest Rod and Net Techniques", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "The Authoritative Kentucky Fishing Guide", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Foraging", ja: "採集", volumes: [
+    { vol: "I", title: "A Feast in the Forest", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Dean's Guide to Sticks & Stones", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Finding The Treasure in the Trash", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Survival Foraging: How Nature Can Save Your Life", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "US Park Service Complete Nature Census - Kentucky", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Glassmaking", ja: "ガラス工芸", volumes: [
+    { vol: "I", title: "Glass: A History", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "From Sand to Glass: A Journey", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Laboratory Manual of Glassblowing", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Secrets of the Carlow Crystal Makers", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Venetian Glass: An Electron Microprobe Analysis", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Knapping", ja: "石器加工", volumes: [
+    { vol: "I", title: "Flint Knapping 101", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Guide to Kentucky Geology", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Lithic Technology Manual 1993", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Schmidt Rock Hardness Testing Techniques", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Technological Morphometrics of Clovis Artifacts", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Long Blade", ja: "長刃", volumes: [
+    { vol: "I", title: "Cool Swords!", levels: "1-2", mult: "×1.5" },
+    { vol: "II", title: "Fencing: A History", levels: "3-4", mult: "×2.5" },
+    { vol: "III", title: "Old Sword-Play by Alfred Hutton", levels: "5-6", mult: "×4" },
+    { vol: "IV", title: "The Zettels of Johannes Liechtenauer", levels: "7-8", mult: "×6" },
+    { vol: "V", title: "Wear Analysis of Selected Medieval Swords", levels: "9-10", mult: "×8" }
+  ]},
+  { skill: "Maintenance", ja: "整備", volumes: [
+    { vol: "I", title: "Basic Repairs", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Better Tools, Made Easy", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Home Guide to Tool Repairs", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Maintaining High Grade Tools", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Understanding Biomechanics of Tool Use", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Masonry", ja: "石工", volumes: [
+    { vol: "I", title: "A Bricklayer's Life", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Flooring: Do It Yourself", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Dibnah's Guide to Bricks", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Secrets of a Professional Mason", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Statistical Analysis of Historic Masonry Constructions", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Mechanics", ja: "機械", volumes: [
+    { vol: "I", title: "Carzone's Repair Guide", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "How Vehicle Engines Work", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Laine's Repair Manual '93", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Long Term Vehicle Maintenance", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Mastering Automotive Fault Diagnosis Techniques", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Pottery", ja: "陶芸", volumes: [
+    { vol: "I", title: "Ancient Pottery", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Build Your Own Kiln", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Glazing Ceramics at Home", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Ming Chinese Masterworks: A Guide", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Pyrometamorphic Process of Ceramic Materials", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Reloading", ja: "装填", volumes: [
+    { vol: "I", title: "Basic Reloading", levels: "1-2", mult: "×1.5" },
+    { vol: "II", title: "Dead Man's Click", levels: "3-4", mult: "×2.5" },
+    { vol: "III", title: "Jungle Style Reloading", levels: "5-6", mult: "×4" },
+    { vol: "IV", title: "Strippers, Speedloaders, and Bolt Action", levels: "7-8", mult: "×6" },
+    { vol: "V", title: "The Ultimate Encyclopedia of Reloading Techniques", levels: "9-10", mult: "×8" }
+  ]},
+  { skill: "Tailoring", ja: "裁縫", volumes: [
+    { vol: "I", title: "Basic Clothing Repair", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "From Rags to Royalty: A Sewing Guide", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Haute Couture Tailoring Methods", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Modern Patterns from the Catwalks of Paris", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Textile Production and Manufacturing Techniques", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Tracking", ja: "追跡", volumes: [
+    { vol: "I", title: "Animal Pawprints", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Hunting with Hemingway", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Long Range Animal Tracking", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "The Smell of Ivory: An African Adventure", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Understanding Animal Behavior Through Spoor Placement", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Trapping", ja: "罠", volumes: [
+    { vol: "I", title: "Basic Pest Control", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Better Trapping, with Dean", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Park Rangers Wildlife Handbook '93", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Research on Rodents and Mammals of Kentucky", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "The Encyclopedia of Applied Animal Psychology", levels: "9-10", mult: "×16" }
+  ]},
+  { skill: "Welding", ja: "溶接", volumes: [
+    { vol: "I", title: "Basics of Welding", levels: "1-2", mult: "×3" },
+    { vol: "II", title: "Building with Metal", levels: "3-4", mult: "×5" },
+    { vol: "III", title: "Machining Metal: The Mass Genfac Guide", levels: "5-6", mult: "×8" },
+    { vol: "IV", title: "Ore to Sheets: A Complete Metalworking Manual", levels: "7-8", mult: "×12" },
+    { vol: "V", title: "Technological Fundamentals of Metal Fabrication", levels: "9-10", mult: "×16" }
+  ]}
+];
+
+const VHS_TAPES = [
+  { series: "Carzone", ja: "機械", tapes: [
+    { name: "Episode 1: Tire Maintenance", skill: "Mechanics +75" },
+    { name: "Episode 2: Engines", skill: "Mechanics +75" },
+    { name: "Episode 3: Windows", skill: "Mechanics +75" }
+  ]},
+  { series: "Exposure Survival", ja: "サバイバル", tapes: [
+    { name: "Episode 1: Fishing", skill: "Fishing +50" },
+    { name: "Episode 2: Bait", skill: "Fishing +75" },
+    { name: "Episode 3: Farming", skill: "Agriculture +87.5" },
+    { name: "Episode 4: Fire", skill: "Carpentry +75" },
+    { name: "Episode 5: Camping", skill: "Carpentry +50, Foraging +12.5" },
+    { name: "Episode 6: Trapping", skill: "Trapping +125" },
+    { name: "Episode 7: Foraging", skill: "Foraging +87.5" },
+    { name: "Episode 8: Water Collection", skill: "Carpentry +87.5" }
+  ]},
+  { series: "The Cook Show", ja: "料理", tapes: [
+    { name: "Episode 1: Cake", skill: "Cooking +75" },
+    { name: "Episode 2: Soup", skill: "Cooking +100" },
+    { name: "Episode 3: Stew", skill: "Cooking +62.5" },
+    { name: "Episode 4: Salads", skill: "Cooking +50" },
+    { name: "Episode 5: Stir-Fry", skill: "Cooking +50" },
+    { name: "Episode 6: Sandwiches", skill: "Cooking +62.5" },
+    { name: "Episode 7: Pie", skill: "Cooking +75" }
+  ]},
+  { series: "Woodcraft", ja: "大工", tapes: [
+    { name: "Episode 1: Bookcases", skill: "Carpentry +62.5" },
+    { name: "Episode 2: Flooring and Signs", skill: "Carpentry +50" },
+    { name: "Episode 3: Frames and Walls", skill: "Carpentry +50" },
+    { name: "Episode 4: Shelves and Fencing", skill: "Carpentry +75" },
+    { name: "Episode 5: Doors", skill: "Carpentry +37.5" },
+    { name: "Episode 6: Beds and Tables", skill: "Carpentry +62.5" },
+    { name: "Episode 7: Stairs", skill: "Carpentry +62.5" }
+  ]},
+  { series: "Home VHS (スキル付き)", ja: "各種", tapes: [
+    { name: "Basic Gun Handling (Officer Use Only)", skill: "Aiming +50, Reloading +75" },
+    { name: "Combat Wound Management", skill: "First Aid +87.5" },
+    { name: "Granny Nani", skill: "Tailoring +75" },
+    { name: "Muldraugh AV Club", skill: "Electrical +75" },
+    { name: "TV repair", skill: "Electrical +75" },
+    { name: "Tailoring 101", skill: "Tailoring +75" },
+    { name: "Tree Planting Guide", skill: "Agriculture +75" },
+    { name: "RMFA", skill: "First Aid +75" },
+    { name: "no 9", skill: "Welding +100" },
+    { name: "nof vid", skill: "Welding +100" },
+    { name: "OSCC '92", skill: "Mechanics +12.5" },
+    { name: "stock cars", skill: "Mechanics +12.5" },
+    { name: "Grady v King", skill: "Lightfooted +12.5" },
+    { name: "Mathematical Quadratics...", skill: "Long Blunt +12.5" }
+  ]},
+  { series: "Retail (スキル付き)", ja: "映画", tapes: [
+    { name: "Dead Wrong (movie)", skill: "Reloading +12.5, Aiming +12.5" },
+    { name: "Mother's Boy", skill: "Short Blade +12.5" }
+  ]},
+  { series: "Z-Squad S2.03", ja: "溶接/機械", tapes: [
+    { name: "Z-Squad S2.03", skill: "Welding +12.5, Mechanics +12.5" }
+  ]}
+];
+
+// === STATE ===
+let currentTab = 'books';
+let openGroups = {};
+
+function getStorage() {
+  try {
+    const raw = localStorage.getItem('pz_b42_collection');
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+function setStorage(data) {
+  localStorage.setItem('pz_b42_collection', JSON.stringify(data));
+}
+
+function getCount(key) {
+  const data = getStorage();
+  return data[key] || 0;
+}
+function setCount(key, val) {
+  const data = getStorage();
+  if (val <= 0) { delete data[key]; } else { data[key] = val; }
+  setStorage(data);
+}
+
+// === RENDER ===
+function render() {
+  const app = document.getElementById('app');
+  const search = document.getElementById('search').value.toLowerCase();
+  const filter = document.getElementById('filter').value;
+
+  if (currentTab === 'books') renderBooks(app, search, filter);
+  else renderVHS(app, search, filter);
+}
+
+function renderBooks(app, search, filter) {
+  let html = '';
+  let totalItems = 0, gotItems = 0;
+
+  BOOKS.forEach(group => {
+    const match = group.skill.toLowerCase().includes(search) || group.ja.includes(search);
+    if (!match) return;
+
+    let groupGot = 0;
+    group.volumes.forEach(v => {
+      totalItems++;
+      if (getCount('book_' + group.skill + '_' + v.vol) > 0) { gotItems++; groupGot++; }
+    });
+
+    if (filter === 'complete' && groupGot < 5) return;
+    if (filter === 'incomplete' && groupGot >= 5) return;
+
+    const isOpen = openGroups[group.skill];
+    const badgeClass = groupGot >= 5 ? 'badge done' : 'badge';
+
+    html += '<div class="skill-group">';
+    html += '<div class="skill-header" data-group="' + group.skill + '">';
+    html += '<span class="name">' + (isOpen ? '▼' : '▶') + ' ' + group.skill + ' (' + group.ja + ')</span>';
+    html += '<span class="' + badgeClass + '">' + groupGot + '/5</span>';
+    html += '</div>';
+    html += '<div class="skill-books ' + (isOpen ? 'open' : '') + '">';
+
+    group.volumes.forEach(v => {
+      const key = 'book_' + group.skill + '_' + v.vol;
+      const count = getCount(key);
+      const got = count > 0;
+
+      html += '<div class="book-item ' + (got ? 'got' : '') + '">';
+      html += '<div class="book-info">';
+      html += '<div class="book-title">Lv.' + v.levels + ' ' + v.mult + ' — Vol.' + v.vol + '</div>';
+      html += '<div class="book-meta">' + v.title + '</div>';
+      html += '</div>';
+      html += '<div class="count-controls">';
+      html += '<button class="count-btn minus" data-key="' + key + '">−</button>';
+      html += '<span class="count-val">' + count + '</span>';
+      html += '<button class="count-btn plus" data-key="' + key + '">+</button>';
+      html += '</div></div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  app.innerHTML = html;
+  updateProgress(totalItems, gotItems);
+}
+
+function renderVHS(app, search, filter) {
+  let html = '';
+  let totalItems = 0, gotItems = 0;
+
+  VHS_TAPES.forEach(group => {
+    const match = group.series.toLowerCase().includes(search) || group.ja.includes(search);
+    if (!match) return;
+
+    let groupGot = 0;
+    const groupTotal = group.tapes.length;
+    group.tapes.forEach(t => {
+      totalItems++;
+      if (getCount('vhs_' + group.series + '_' + t.name) > 0) { gotItems++; groupGot++; }
+    });
+
+    if (filter === 'complete' && groupGot < groupTotal) return;
+    if (filter === 'incomplete' && groupGot >= groupTotal) return;
+
+    const isOpen = openGroups['vhs_' + group.series];
+    const badgeClass = groupGot >= groupTotal ? 'badge done' : 'badge';
+
+    html += '<div class="skill-group">';
+    html += '<div class="skill-header" data-group="vhs_' + group.series + '">';
+    html += '<span class="name">' + (isOpen ? '▼' : '▶') + ' ' + group.series + ' (' + group.ja + ')</span>';
+    html += '<span class="' + badgeClass + '">' + groupGot + '/' + groupTotal + '</span>';
+    html += '</div>';
+    html += '<div class="skill-books ' + (isOpen ? 'open' : '') + '">';
+
+    group.tapes.forEach(t => {
+      const key = 'vhs_' + group.series + '_' + t.name;
+      const count = getCount(key);
+      const got = count > 0;
+
+      html += '<div class="book-item ' + (got ? 'got' : '') + '">';
+      html += '<div class="book-info">';
+      html += '<div class="book-title">' + t.name + '</div>';
+      html += '<div class="book-meta">🎯 ' + t.skill + '</div>';
+      html += '</div>';
+      html += '<div class="count-controls">';
+      html += '<button class="count-btn minus" data-key="' + key + '">−</button>';
+      html += '<span class="count-val">' + count + '</span>';
+      html += '<button class="count-btn plus" data-key="' + key + '">+</button>';
+      html += '</div></div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  app.innerHTML = html;
+  updateProgress(totalItems, gotItems);
+}
+
+function updateProgress(total, got) {
+  const pct = total > 0 ? Math.round((got / total) * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = got + ' / ' + total + ' 取得済 (' + pct + '%)';
+}
+
+// === EVENTS ===
+document.getElementById('app').addEventListener('click', function(e) {
+  const header = e.target.closest('.skill-header');
+  if (header) {
+    const g = header.dataset.group;
+    openGroups[g] = !openGroups[g];
+    render();
+    return;
+  }
+  const btn = e.target.closest('.count-btn');
+  if (btn) {
+    const key = btn.dataset.key;
+    let count = getCount(key);
+    if (btn.classList.contains('plus')) { count++; }
+    else { count = Math.max(0, count - 1); }
+    setCount(key, count);
+    render();
+  }
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+    currentTab = this.dataset.tab;
+    openGroups = {};
+    render();
+  });
+});
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('filter').addEventListener('change', render);
+document.getElementById('reset-btn').addEventListener('click', function() {
+  if (confirm('全てのデータをリセットしますか？')) {
+    localStorage.removeItem('pz_b42_collection');
+    render();
+  }
+});
+
+// Init
+render();
+</script>
+</body>
+</html>
