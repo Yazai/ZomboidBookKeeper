@@ -74,6 +74,14 @@ h1 { text-align: center; font-size: 1.1rem; margin-bottom: 8px; color: #e94560; 
   padding: 2px 8px; font-size: 11px; white-space: nowrap;
 }
 .skill-header .badge.done { background: #2ecc71; }
+.vol-cells {
+  display: flex; gap: 3px; align-items: center; margin-right: 8px;
+}
+.vol-cell {
+  width: 14px; height: 14px; border-radius: 3px;
+  background: #2a2a4a; border: 1px solid #444;
+}
+.vol-cell.got { background: #2ecc71; border-color: #27ae60; }
 .skill-books { display: none; padding: 6px 0 0 0; }
 .skill-books.open { display: block; }
 .book-item {
@@ -390,7 +398,15 @@ function renderBooks(app, search, filter) {
     html += '<div class="skill-group">';
     html += '<div class="skill-header" data-group="' + group.skill + '">';
     html += '<span class="name">' + (isOpen ? '▼' : '▶') + ' ' + group.skill + ' (' + group.ja + ')</span>';
+    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    html += '<div class="vol-cells">';
+    group.volumes.forEach(v => {
+      const got = getCount('book_' + group.skill + '_' + v.vol) > 0;
+      html += '<div class="vol-cell ' + (got ? 'got' : '') + '"></div>';
+    });
+    html += '</div>';
     html += '<span class="' + badgeClass + '">' + groupGot + '/5</span>';
+    html += '</div>';
     html += '</div>';
     html += '<div class="skill-books ' + (isOpen ? 'open' : '') + '">';
 
@@ -442,7 +458,15 @@ function renderVHS(app, search, filter) {
     html += '<div class="skill-group">';
     html += '<div class="skill-header" data-group="vhs_' + group.series + '">';
     html += '<span class="name">' + (isOpen ? '▼' : '▶') + ' ' + group.series + ' (' + group.ja + ')</span>';
+    html += '<div style="display:flex;align-items:center;gap:6px;">';
+    html += '<div class="vol-cells">';
+    group.tapes.forEach(t => {
+      const got = getCount('vhs_' + group.series + '_' + t.name) > 0;
+      html += '<div class="vol-cell ' + (got ? 'got' : '') + '"></div>';
+    });
+    html += '</div>';
     html += '<span class="' + badgeClass + '">' + groupGot + '/' + groupTotal + '</span>';
+    html += '</div>';
     html += '</div>';
     html += '<div class="skill-books ' + (isOpen ? 'open' : '') + '">';
 
